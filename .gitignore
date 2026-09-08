@@ -36,6 +36,9 @@ Thumbs.db
 # Claude Code: share project instructions & skills, keep personal settings local
 .claude/
 
-# Working notes (docs/ is otherwise tracked)
-docs/logs.md
-docs/docker_log.md
+# Working notes — always local, never committed. These are bare (unanchored)
+# patterns so they match at any depth: a stray logs.md created at the repo root
+# is ignored just like docs/logs.md. (docs/ is otherwise tracked.)
+logs.md
+docker_log.md
+*.log

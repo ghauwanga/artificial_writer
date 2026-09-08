@@ -1,25 +1,27 @@
 # Artificial Writer
 
-![Artificial Writer](docs/assets/artiwriter.png)
+![The signed-in web console](docs/assets/web.png)
 
-Fetch an article from a URL, extract the readable text, and summarize it — from a
-**command line**, a **desktop GUI**, or a **web app**. Summarization is **pluggable**
-and the default backend is **free and works fully offline** (no API key required).
+Fetch an article from a URL, extract its readable text, and summarize it — from a
+command line, a desktop GUI, or a web app. Summarizer backends are pluggable, and
+the default one runs offline with no API key.
 
-> Originally a school project, rebuilt from the ground up as a clean, tested,
-> multi-interface Python application.
+> Originally a school project, rebuilt as a tested, typed, multi-interface
+> application.
 
 ---
 
 ## Highlights
 
-- **Pluggable summarizers** behind one small interface — swap backends with a flag.
-- **Free by default**: a built-in extractive summarizer runs offline with zero config.
-- **Free local LLM** support via [Ollama](https://ollama.com) (no API key).
-- **Optional cloud LLMs**: OpenAI and Anthropic (bring your own key).
-- **Three front-ends** sharing one pipeline: CLI, Tkinter GUI, FastAPI web app.
-- **Tested** with `pytest` (network mocked), **typed** (`mypy`), **linted** (`ruff`), **CI** on 3.10–3.13.
-- **Clean architecture**: `src/` layout, typed config, domain errors, dependency injection.
+- Extractive summarization offline by default; [Ollama](https://ollama.com) for a
+  free local LLM; OpenAI and Anthropic behind their own API keys.
+- Three front-ends — CLI, Tkinter desktop, FastAPI web — over one shared pipeline.
+- HTML articles, PDFs, and YouTube transcripts, dispatched by URL.
+- Six output formats: prose, TL;DR, bullets, quotes, tweet, LinkedIn.
+- A multi-tenant service layer on Postgres and Redis: sessions and API keys,
+  per-user archives with full-text search, tier quotas, batch jobs, RSS polling.
+- Typed (`mypy`), linted (`ruff`), tested with `pytest` against mocked network,
+  CI on Python 3.10–3.13.
 
 ## Architecture
 
@@ -29,42 +31,52 @@ URL ──▶ TextFetcher ──▶ clean text ──▶ Summarizer ──▶ su
                  extractive · ollama · openai · anthropic  (chosen by a factory)
 ```
 
-The three front-ends are kept as separate, co-equal packages — `cli/`, `gui/`,
-and `web/` — each a thin wrapper around the shared engine in
-[`core/`](src/artificial_writer/core). A front-end depends on `core` and never
-on another front-end, so behavior stays consistent and the interfaces stay small.
+The three front-ends are separate, co-equal packages — `cli/`, `gui/`, and `web/` —
+each a thin wrapper around the shared engine in
+[`core/`](src/artificial_writer/core). A front-end depends on `core` and never on
+another front-end, so behavior stays consistent and the interfaces stay small.
 
 ```
 run_cli.py · run_gui.py · run_web.py   # top-level launchers for each front-end
 src/artificial_writer/
-├── core/                # the shared engine every front-end is built on
-│   ├── config.py        #   typed settings from env / .env (pydantic-settings)
-│   ├── pipeline.py      #   fetch → summarize → store orchestration
-│   ├── storage.py       #   save/read results
-│   ├── output_format.py #   paragraph / bullets / TL;DR rendering
-│   ├── errors.py        #   domain error hierarchy
-│   ├── fetchers/        #   source → cleaned article text, by URL type
-│   │   ├── base.py      #     Fetcher ABC + FetchedArticle
-│   │   ├── registry.py  #     URL-based dispatch to a fetcher
-│   │   ├── html.py      #     articles (default)
-│   │   ├── pdf.py       #     PDF documents        [pdf extra]
-│   │   └── youtube.py   #     video transcripts    [youtube extra]
-│   └── summarizers/     #   pluggable backends + factory
-│       ├── base.py      #     Summarizer ABC + SummaryResult
-│       ├── factory.py   #     builds the configured backend
-│       ├── extractive.py#     free, offline (default)
-│       ├── ollama.py    #     free, local LLM
+├── core/                    # the shared engine every front-end is built on
+│   ├── config.py            #   typed settings from env / .env (pydantic-settings)
+│   ├── pipeline.py          #   fetch → summarize → store orchestration
+│   ├── storage.py           #   save/read results
+│   ├── output_format.py     #   prose / tldr / bullets / quotes / tweet / linkedin
+│   ├── errors.py            #   domain error hierarchy
+│   ├── fetchers/            #   source → cleaned article text, by URL type
+│   │   ├── base.py          #     Fetcher ABC + FetchedArticle
+│   │   ├── registry.py      #     URL-based dispatch to a fetcher
+│   │   ├── html.py          #     articles (default)
+│   │   ├── pdf.py           #     PDF documents        [pdf extra]
+│   │   └── youtube.py       #     video transcripts    [youtube extra]
+│   └── summarizers/         #   pluggable backends + factory
+│       ├── base.py          #     Summarizer ABC + SummaryResult
+│       ├── factory.py       #     builds the configured backend
+│       ├── prompt.py        #     shared prompt construction
+│       ├── pricing.py       #     per-model token costs, for quota accounting
+│       ├── extractive.py    #     free, offline (default)
+│       ├── ollama.py        #     free, local LLM
 │       ├── openai_provider.py
 │       └── anthropic_provider.py
-├── service/             # multi-tenant layer: auth, quotas, archive, jobs
-│   ├── models.py        #   SQLAlchemy tables
-│   ├── repository.py    #   per-user persistence + full-text search
-│   ├── auth.py          #   sessions, password hashing, API keys
-│   ├── quotas.py        #   tier policy: backend gating + daily caps
-│   └── jobs/            #   RQ queue, batch tasks, feed scheduler
-├── cli/                 # command-line front-end
-├── gui/                 # Tkinter desktop front-end
-└── web/                 # FastAPI app, routers, and Jinja templates
+├── service/                 # multi-tenant layer: auth, quotas, archive, jobs
+│   ├── db.py                #   async engine + session lifecycle
+│   ├── models.py            #   SQLAlchemy tables
+│   ├── schemas.py           #   request/response models
+│   ├── repository.py        #   per-user persistence + full-text search
+│   ├── auth.py              #   sessions, password hashing, API keys
+│   ├── quotas.py            #   tier policy: backend gating + daily caps
+│   ├── summarize_service.py #   pipeline call wrapped in quota + archive logic
+│   ├── digests.py           #   grouped multi-article results
+│   ├── feeds.py             #   RSS subscriptions
+│   └── jobs/                #   RQ queue, batch tasks, feed scheduler
+├── cli/                     # command-line front-end
+├── gui/                     # Tkinter desktop front-end
+└── web/                     # FastAPI app
+    ├── app.py               #   form UI, browser console, health, /api/fetch
+    ├── routers/             #   auth, summarize, batch, feeds, digests
+    └── templates/           #   Jinja templates
 ```
 
 Tests mirror that layout:
@@ -84,23 +96,11 @@ tests/
 ```bash
 git clone https://github.com/TymFly/artificial_writer.git
 cd artificial_writer
-```
-
-Create and activate a virtual environment:
-
-```bash
-# macOS / Linux
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 ```
 
-```powershell
-# Windows (PowerShell)
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-Then install:
+Then pick the extras you need:
 
 ```bash
 pip install -e .                # core (CLI + GUI, free extractive summarizer)
@@ -119,8 +119,8 @@ artwriter https://example.com/article --summarizer ollama --save
 artwriter https://example.com/article --json
 ```
 
-(or `python -m artificial_writer <url>`, or `python run_cli.py <url>` from a
-source checkout)
+Also available as `python -m artificial_writer <url>`, or `python run_cli.py <url>`
+from a source checkout.
 
 ### Desktop GUI
 
@@ -132,6 +132,8 @@ python -m artificial_writer.gui      # or: python run_gui.py
 Enter a URL and click **Fetch** to pull and view the original article text, then
 pick a backend and click **Summarize**.
 
+![The Tkinter desktop GUI](docs/assets/artiwriter.png)
+
 ### Web app
 
 ```bash
@@ -139,12 +141,15 @@ artwriter-web                        # installed console script (needs [web] ext
 python -m artificial_writer.web      # or: python run_web.py
 ```
 
-(then open http://127.0.0.1:8000)
+Two pages are served on http://127.0.0.1:8000:
 
-Enter a URL and click **Fetch** to view the original text, then choose a backend
-(and a local **Model** name for Ollama) and click **Summarize**.
+- `/` — a form that fetches an article, then summarizes it with a chosen backend
+  (and, for Ollama, a local model name). No account needed, free backends only.
+- `/app` — the signed-in console pictured at the top, which drives the JSON API from
+  the browser: summarize, search the archive, read digests, manage the account and
+  API keys.
 
-JSON API (single-user, no auth):
+The unauthenticated JSON endpoint mirrors the form:
 
 ```bash
 # fetch only — clean the article text without summarizing
@@ -152,10 +157,6 @@ curl -X POST http://127.0.0.1:8000/api/fetch \
      -H "Content-Type: application/json" \
      -d '{"url": "https://example.com/article"}'
 ```
-
-> The HTML form and `/api/fetch` are unauthenticated and limited to the **free**
-> backends. The authenticated, multi-tenant `/api/summarize` (with per-user
-> archives, paid backends, quotas, batch jobs, and feeds) is described below.
 
 ## Multi-tenant web service
 
@@ -168,11 +169,22 @@ cp .env.example .env                 # set AW_SESSION_SECRET (and any API keys)
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-That starts five services — **postgres**, **redis**, **api** (on
+That starts five services: **postgres**, **redis**, **api** (on
 http://127.0.0.1:8000), **worker** (RQ batch/feed jobs), and **scheduler**
 (periodic feed polling). The `api` container runs `alembic upgrade head` on start
 via [`infra/entrypoint.sh`](infra/entrypoint.sh), so the schema is always current.
-Check it with `curl http://127.0.0.1:8000/health`.
+
+Two unauthenticated health endpoints:
+
+```bash
+curl http://127.0.0.1:8000/health        # liveness: the process is up
+curl http://127.0.0.1:8000/health/ready  # readiness: pings the DB; 503 if unreachable
+```
+
+The compose healthcheck gates `worker` and `scheduler` on `/health/ready`, so they
+never start against a dead or unmigrated database. If the database goes down,
+authenticated endpoints return 503 with an actionable message rather than an empty
+500.
 
 **Register a user, then authenticate with either a cookie or an API key:**
 
@@ -191,25 +203,27 @@ curl -X POST http://127.0.0.1:8000/api/summarize \
      -d '{"url": "https://example.com/article", "output_format": "bullets"}'
 ```
 
-Authenticated endpoints (all scoped to the calling user):
+Authenticated endpoints, all scoped to the calling user:
 
 | Method & path | Purpose |
 | --- | --- |
 | `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` | Session (cookie) auth |
+| `GET /auth/me` | Profile, tier, and today's usage against the caps |
+| `POST /auth/email` · `POST /auth/password` · `DELETE /auth/account` | Account management (each confirmed with the current password) |
 | `POST /auth/keys` · `GET /auth/keys` · `DELETE /auth/keys/{id}` | Issue / list / revoke API keys |
 | `POST /api/summarize` | Fetch + summarize one URL, stored to the user's archive |
 | `GET /api/archive?q=` | Full-text search the user's stored summaries |
 | `POST /api/batch` · `GET /api/batch/{job_id}` | Summarize many URLs into one digest (async) |
 | `POST /api/feeds` · `GET /api/feeds` · `DELETE /api/feeds/{id}` | Manage polled RSS feeds |
-| `GET /api/digests` · `GET /api/digests/{id}` | View batch/feed digests (JSON or HTML) |
+| `GET /api/digests` · `GET /api/digests/{id}` · `DELETE /api/digests/{id}` | View and remove batch/feed digests (JSON or HTML) |
 
-Tier policy gates the paid backends: a **free** tier may only use the offline/free
-backends (a paid backend → `403`) and is bounded by a daily request cap
-(over-cap → `429`); a **pro** tier unlocks OpenAI/Anthropic up to a daily request
-and USD cost ceiling. See the `AW_*` tier vars in [`.env.example`](.env.example).
+Tier policy gates the paid backends: a free tier may use only the offline/free
+backends (a paid backend returns 403) and is bounded by a daily request cap (429
+over cap); a pro tier unlocks OpenAI and Anthropic up to a daily request and USD
+cost ceiling. See the `AW_*` tier vars in [`.env.example`](.env.example).
 
-The offline CLI and desktop GUI are **unchanged** by all of this — they need none
-of the `server` dependencies and never touch Postgres or Redis.
+None of this touches the CLI or desktop GUI — they need no `server` dependencies
+and never reach Postgres or Redis.
 
 ## Configuration
 
@@ -237,7 +251,7 @@ The multi-tenant web service adds a few more (see [`.env.example`](.env.example)
 | `AW_SESSION_SECRET` | `change-me` | Signs the `aw_session` login cookie — change it in any deploy |
 | `AW_DEFAULT_TIER` | `free` | Tier assigned to new users |
 | `AW_FREE_BACKENDS` / `AW_PAID_BACKENDS` | `["extractive","ollama"]` / `["openai","anthropic"]` | Which backends each class of tier may use |
-| `AW_TIER_DAILY_REQUEST_CAP` | `{"free": 20, "pro": 500}` | Per-tier daily request caps (429 over-cap) |
+| `AW_TIER_DAILY_REQUEST_CAP` | `{"free": 20, "pro": 500}` | Per-tier daily request caps (429 over cap) |
 | `AW_TIER_DAILY_COST_CAP_USD` | `{"free": 0.0, "pro": 5.0}` | Per-tier daily USD cost caps (a `0` cap blocks paid backends, 403) |
 
 ### Using a free local LLM (Ollama)

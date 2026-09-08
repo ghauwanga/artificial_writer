@@ -1,0 +1,16 @@
+# Line-ending policy.
+#
+# Git on Windows commonly runs with core.autocrlf=true, which rewrites LF to
+# CRLF on checkout. That is harmless for Python sources, but fatal for files a
+# Linux container *executes*: `docker build` copies the working tree, so a
+# CRLF shebang lands in the image and the container dies at startup with
+#
+#     env: 'bash\r': No such file or directory        (exit 127)
+#
+# Pin LF for shell scripts so a Windows clone still produces a working image.
+*.sh text eol=lf
+
+# Copied into the image and used at build/run time; keep them LF for the same
+# reason (line continuations and shebangs must not carry CRs).
+Dockerfile text eol=lf
+infra/entrypoint.sh text eol=lf

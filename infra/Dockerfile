@@ -26,7 +26,12 @@ RUN pip install ".[all]"
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY infra/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Strip CRs before making it executable. .gitattributes pins LF at checkout, but
+# this keeps the image buildable from a clone made before that existed (or with
+# core.autocrlf=true and no attributes): a CRLF shebang makes the container exit
+# 127 with `env: 'bash\r': No such file or directory`.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 8000
 
