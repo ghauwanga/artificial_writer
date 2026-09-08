@@ -19,7 +19,7 @@ from .errors import (
     QuotaExceeded,
     SummarizationError,
 )
-from .fetcher import FetchedArticle, TextFetcher
+from .fetchers import FetchedArticle, TextFetcher
 from .output_format import OutputFormat
 from .pipeline import Pipeline, PipelineResult
 from .storage import Storage

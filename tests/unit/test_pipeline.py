@@ -5,13 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from artificial_writer.core.config import Settings, SummarizerType
-from artificial_writer.core.fetcher import FetchedArticle
+from artificial_writer.core.fetchers import FetchedArticle
 from artificial_writer.core.output_format import OutputFormat
 from artificial_writer.core.pipeline import Pipeline
 from artificial_writer.core.storage import Storage
 from artificial_writer.core.summarizers.base import Summarizer, SummaryResult
-
-from .conftest import SAMPLE_TEXT
+from tests.samples import SAMPLE_TEXT
 
 
 class FakeFetcher:

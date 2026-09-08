@@ -36,6 +36,6 @@ Thumbs.db
 # Claude Code: share project instructions & skills, keep personal settings local
 .claude/
 
-# Logs
-logs.md
-docker_log.md
+# Working notes (docs/ is otherwise tracked)
+docs/logs.md
+docs/docker_log.md

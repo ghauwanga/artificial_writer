@@ -25,12 +25,14 @@ from ..core.errors import (
     ConfigurationError,
     FetchError,
     QuotaExceeded,
+    StorageUnavailable,
     SummarizationError,
 )
 from ..core.output_format import OutputFormat
 from ..core.pipeline import Pipeline, PipelineResult
 from ..core.summarizers import list_ollama_models
 from ..service import quotas
+from ..service.db import check_connection
 from ..service.schemas import FetchRequest, FetchResponse, SummarizeResponse
 from .routers import auth as auth_router
 from .routers import batch as batch_router
@@ -76,6 +78,17 @@ async def _http_exception_handler(
 @app.exception_handler(AuthError)
 async def _auth_error_handler(_: Request, exc: AuthError) -> JSONResponse:
     return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+@app.exception_handler(StorageUnavailable)
+async def _storage_error_handler(_: Request, exc: StorageUnavailable) -> JSONResponse:
+    # The process is fine but its database is not: 503 + Retry-After, so callers
+    # (and the browser console) see "the service is down" rather than a bare 500.
+    return JSONResponse(
+        status_code=503,
+        content={"detail": str(exc)},
+        headers={"Retry-After": "5"},
+    )
 
 
 @app.exception_handler(QuotaExceeded)
@@ -151,8 +164,30 @@ def _summarize_text(
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Liveness probe."""
+    """Liveness probe: the process is serving. Deliberately touches nothing.
+
+    Use ``/health/ready`` to find out whether it can actually do any work.
+    """
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def ready() -> JSONResponse:
+    """Readiness probe: 200 only when the database actually answers.
+
+    ``/health`` stays up as soon as uvicorn binds, which made a live process
+    with an unreachable database look healthy while every authenticated
+    endpoint returned a 500. This one pings the database and reports 503 with
+    the reason when it cannot be reached.
+    """
+    reason = await check_connection()
+    if reason is not None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not ready", "database": "unavailable", "detail": reason},
+            headers={"Retry-After": "5"},
+        )
+    return JSONResponse(content={"status": "ready", "database": "ok"})
 
 
 @app.post("/api/fetch", response_model=FetchResponse)

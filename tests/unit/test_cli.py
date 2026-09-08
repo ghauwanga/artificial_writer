@@ -8,7 +8,7 @@ import pytest
 
 from artificial_writer.cli import app as cli
 from artificial_writer.core.errors import FetchError
-from artificial_writer.core.fetcher import FetchedArticle
+from artificial_writer.core.fetchers import FetchedArticle
 from artificial_writer.core.pipeline import PipelineResult
 from artificial_writer.core.summarizers.base import SummaryResult
 

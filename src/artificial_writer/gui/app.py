@@ -13,7 +13,7 @@ from tkinter import messagebox, scrolledtext, ttk
 
 from ..core.config import SummarizerType, configure_logging, get_settings
 from ..core.errors import ArtificialWriterError
-from ..core.fetcher import FetchedArticle
+from ..core.fetchers import FetchedArticle
 from ..core.pipeline import Pipeline, PipelineResult
 
 _BG = "#f7f5dd"

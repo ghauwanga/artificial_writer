@@ -1,6 +1,6 @@
 # Artificial Writer
 
-![Artificial Writer](artiwriter.png)
+![Artificial Writer](docs/assets/artiwriter.png)
 
 Fetch an article from a URL, extract the readable text, and summarize it — from a
 **command line**, a **desktop GUI**, or a **web app**. Summarization is **pluggable**
@@ -39,19 +39,44 @@ run_cli.py · run_gui.py · run_web.py   # top-level launchers for each front-en
 src/artificial_writer/
 ├── core/                # the shared engine every front-end is built on
 │   ├── config.py        #   typed settings from env / .env (pydantic-settings)
-│   ├── fetcher.py       #   URL → cleaned article text
 │   ├── pipeline.py      #   fetch → summarize → store orchestration
 │   ├── storage.py       #   save/read results
+│   ├── output_format.py #   paragraph / bullets / TL;DR rendering
 │   ├── errors.py        #   domain error hierarchy
+│   ├── fetchers/        #   source → cleaned article text, by URL type
+│   │   ├── base.py      #     Fetcher ABC + FetchedArticle
+│   │   ├── registry.py  #     URL-based dispatch to a fetcher
+│   │   ├── html.py      #     articles (default)
+│   │   ├── pdf.py       #     PDF documents        [pdf extra]
+│   │   └── youtube.py   #     video transcripts    [youtube extra]
 │   └── summarizers/     #   pluggable backends + factory
 │       ├── base.py      #     Summarizer ABC + SummaryResult
+│       ├── factory.py   #     builds the configured backend
 │       ├── extractive.py#     free, offline (default)
 │       ├── ollama.py    #     free, local LLM
 │       ├── openai_provider.py
 │       └── anthropic_provider.py
+├── service/             # multi-tenant layer: auth, quotas, archive, jobs
+│   ├── models.py        #   SQLAlchemy tables
+│   ├── repository.py    #   per-user persistence + full-text search
+│   ├── auth.py          #   sessions, password hashing, API keys
+│   ├── quotas.py        #   tier policy: backend gating + daily caps
+│   └── jobs/            #   RQ queue, batch tasks, feed scheduler
 ├── cli/                 # command-line front-end
 ├── gui/                 # Tkinter desktop front-end
-└── web/                 # FastAPI app + HTML page
+└── web/                 # FastAPI app, routers, and Jinja templates
+```
+
+Tests mirror that layout:
+
+```
+tests/
+├── conftest.py          # shared fixtures (DB engines, TestClients, settings)
+├── samples.py           # sample article inputs
+├── unit/                # core engine + CLI, no I/O (network mocked)
+├── service/             # auth, quotas, repository, background jobs
+├── web/                 # HTTP routes and auth flows
+└── e2e/                 # full register → summarize → archive flow
 ```
 
 ## Installation
@@ -230,6 +255,17 @@ pip install -e ".[all,dev]"
 pytest            # run the test suite (network is mocked)
 ruff check .      # lint
 mypy              # type-check
+```
+
+`pyproject.toml` is the single source of truth for dependencies — pick the extras
+you need (`web`, `server`, `openai`, `anthropic`, `pdf`, `youtube`, `all`, `dev`)
+rather than a `requirements.txt`. Test subsets run by directory:
+
+```bash
+pytest tests/unit         # fast: core engine + CLI, no DB
+pytest tests/service      # service layer against SQLite
+pytest tests/web          # HTTP routes
+pytest tests/e2e          # full flow (Postgres via testcontainers; skips without Docker)
 ```
 
 ## License

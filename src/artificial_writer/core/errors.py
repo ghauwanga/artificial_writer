@@ -23,6 +23,16 @@ class AuthError(ArtificialWriterError):
     """Raised when a request cannot be authenticated (bad/missing credentials)."""
 
 
+class StorageUnavailable(ArtificialWriterError):
+    """Raised when the backing database cannot be reached or queried.
+
+    This is an *infrastructure* failure, not a caller mistake: Postgres is down,
+    unreachable, or has no schema yet. Front-ends map it to HTTP 503 so the
+    condition is legible ("start the database") instead of surfacing as a bare
+    500 with an empty body.
+    """
+
+
 class QuotaExceeded(ArtificialWriterError):
     """Raised when a request violates a user's tier policy or daily caps.
 

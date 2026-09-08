@@ -68,7 +68,10 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      # /health/ready (not /health) -- it pings the database, so the api is only
+      # "healthy" once migrations have run and queries actually work. worker and
+      # scheduler gate on this, so they no longer start against a dead schema.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
       interval: 5s
       timeout: 5s
       retries: 12

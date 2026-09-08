@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 
 from artificial_writer.core.summarizers.extractive import ExtractiveSummarizer
-
-from .conftest import SAMPLE_TEXT
+from tests.samples import SAMPLE_TEXT
 
 
 def test_returns_requested_number_of_sentences() -> None:

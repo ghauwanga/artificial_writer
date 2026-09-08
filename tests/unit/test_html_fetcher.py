@@ -6,9 +6,8 @@ import pytest
 import responses
 
 from artificial_writer.core.errors import FetchError
-from artificial_writer.core.fetcher import TextFetcher
-
-from .conftest import SAMPLE_HTML
+from artificial_writer.core.fetchers import TextFetcher
+from tests.samples import SAMPLE_HTML
 
 
 @responses.activate

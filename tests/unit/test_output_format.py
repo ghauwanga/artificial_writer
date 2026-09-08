@@ -8,8 +8,7 @@ from artificial_writer.core.summarizers.base import estimate_tokens, trim_to_sen
 from artificial_writer.core.summarizers.extractive import ExtractiveSummarizer
 from artificial_writer.core.summarizers.openai_provider import OpenAISummarizer
 from artificial_writer.core.summarizers.prompt import build_prompt
-
-from .conftest import SAMPLE_TEXT
+from tests.samples import SAMPLE_TEXT
 
 
 def test_build_prompt_prose_is_unchanged_default() -> None:

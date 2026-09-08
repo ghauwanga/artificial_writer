@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -18,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from ..core.config import get_settings
+from ..core.errors import StorageUnavailable
 
 
 class Base(DeclarativeBase):
@@ -62,7 +66,51 @@ def reset_engine() -> None:
     _sessionmaker = None
 
 
+# Connectivity failures, as opposed to caller mistakes. asyncpg raises a bare
+# ``OSError`` (e.g. ConnectionRefusedError) when the server is not listening --
+# SQLAlchemy never wraps it, because OSError is not a DBAPI ``Error`` -- so it
+# has to be caught alongside SQLAlchemy's own connect/disconnect errors.
+# ``IntegrityError``/``ProgrammingError`` are deliberately excluded: those mean
+# the code or schema is wrong, and should stay loud 500s rather than be
+# mislabelled as "the database is down".
+_UNREACHABLE = (OSError, InterfaceError, OperationalError)
+
+
+def _safe_url() -> str:
+    """Return the configured database URL with any password masked."""
+    try:
+        return make_url(get_settings().database_url).render_as_string(hide_password=True)
+    except Exception:  # pragma: no cover - a malformed URL must not mask the real error
+        return "the configured database"
+
+
+def _unreachable_message(exc: BaseException) -> str:
+    return f"Database unavailable at {_safe_url()}: {exc}"
+
+
+async def check_connection() -> str | None:
+    """Ping the database; return ``None`` if it answers, else a short reason.
+
+    Used by the readiness probe so a live process with a dead database reports
+    itself as not-ready instead of claiming to be healthy.
+    """
+    try:
+        async with get_sessionmaker()() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001 - the probe reports, never raises
+        return _unreachable_message(exc)
+    return None
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency that yields an :class:`AsyncSession`."""
-    async with get_sessionmaker()() as session:
-        yield session
+    """FastAPI dependency that yields an :class:`AsyncSession`.
+
+    Failures to reach the database are re-raised as
+    :class:`~...core.errors.StorageUnavailable` so front-ends can return a 503
+    with an actionable message instead of an empty 500.
+    """
+    try:
+        async with get_sessionmaker()() as session:
+            yield session
+    except _UNREACHABLE as exc:
+        raise StorageUnavailable(_unreachable_message(exc)) from exc
